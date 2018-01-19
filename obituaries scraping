@@ -1,0 +1,62 @@
+#final ver
+
+#get source
+l=[]
+profile_link="https://www.nytimes.com/section/obituaries"
+driver = webdriver.Chrome()
+driver.get(profile_link)
+driver.find_element_by_class_name('buttons').click()
+
+#infinite scroll
+def execute_times(times):
+    for i in range(times + 1):
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(3)
+execute_times(1)
+
+r=driver.page_source
+soup=BeautifulSoup(r,'html.parser')
+headlines=[]
+summaries=[]
+deathdate=[]
+
+for wrapper in soup.find_all('li',{'id': re.compile('story-id.*')}):
+    headlines.append  (wrapper.find('h2').text.replace('\n', '').strip())
+    summaries.append (wrapper.find('p').text)
+    deathdate.append (datetime.strptime(wrapper.find('time').text.replace('\n', '').strip(), '%b. %d, %Y').date())
+
+
+for headline,summary,deathdate in zip(headlines,summaries,deathdate):
+    data={
+        'headline':headline,
+        'summary':summary,
+        'deathdate':deathdate
+        
+    }
+    l.append(data)
+    print(data)
+
+
+    
+# extract lifetime   
+df=pd.DataFrame(l)
+def lifetime(headline):
+    for s in re.split(',| |;',headline):
+        if (s.isdigit() and (len(s)==2 or len(s)==3)):
+            return int(s)
+df['lifetime']=df['headline'].apply(lifetime)
+
+#calculate birthdate
+df = df.where((pd.notnull(df)), None)
+def calculate_birthdate(row):
+    if row['lifetime'] == None:
+        val = None
+    else:
+        val = row['deathdate']-relativedelta(years=int(row['lifetime']))
+    return val
+df['birthdate'] = df.apply(calculate_birthdate, axis=1)
+
+# extract name
+def extract_name(str):
+    return re.split(',',str)[0]
+df['name']= df['headline'].apply(extract_name)
